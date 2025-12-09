@@ -203,6 +203,19 @@ func rootSyncWithHelm(opts ...func(*v1beta1.RootSync)) *v1beta1.RootSync {
 	return rs
 }
 
+func rootSyncWithOci(opts ...func(*v1beta1.RootSync)) *v1beta1.RootSync {
+	rs := k8sobjects.RootSyncObjectV1Beta1(configsync.RootSyncName)
+	rs.Spec.SourceType = configsync.OciSource
+	rs.Spec.Oci = &v1beta1.Oci{
+		Image: "fake-image",
+		Auth:  configsync.AuthNone,
+	}
+	for _, opt := range opts {
+		opt(rs)
+	}
+	return rs
+}
+
 func TestRepoSyncMetadata(t *testing.T) {
 	testCases := map[string]struct {
 		rs         *v1beta1.RepoSync
@@ -432,6 +445,15 @@ func TestValidateRepoSyncSpec(t *testing.T) {
 			wantErr: MissingOciImage(configsync.RepoSyncKind),
 		},
 		{
+			name: "illegal secret",
+			obj: repoSyncWithOci(func(rs *v1beta1.RepoSync) {
+				rs.Spec.Oci.SecretRef = &v1beta1.SecretReference{
+					Name: "illegal secret",
+				}
+			}),
+			wantErr: IllegalSecretRef(configsync.OciSource, configsync.RepoSyncKind),
+		},
+		{
 			name:    "invalid auth type",
 			obj:     repoSyncWithOci(ociAuth("invalid auth")),
 			wantErr: InvalidOciAuthType(configsync.RepoSyncKind),
@@ -455,6 +477,32 @@ func TestValidateRepoSyncSpec(t *testing.T) {
 			name:    "redundant Git spec",
 			obj:     repoSyncWithOci(withGit()),
 			wantErr: nil,
+		},
+		{
+			name: "spec.oci.auth=token and valid spec.oci.secretRef",
+			obj: repoSyncWithOci(func(rs *v1beta1.RepoSync) {
+				rs.Spec.Oci.Auth = configsync.AuthToken
+				rs.Spec.Oci.SecretRef = &v1beta1.SecretReference{
+					Name: "token",
+				}
+			}),
+			wantErr: nil,
+		},
+		{
+			name: "spec.oci.auth=token and nil spec.oci.secretRef",
+			obj: repoSyncWithOci(func(rs *v1beta1.RepoSync) {
+				rs.Spec.Oci.Auth = configsync.AuthToken
+			}),
+			wantErr: MissingSecretRef(configsync.OciSource, configsync.RepoSyncKind),
+		},
+		{
+			name: "spec.oci.auth=token and nil spec.oci.secretRef.name",
+			obj: repoSyncWithOci(func(rs *v1beta1.RepoSync) {
+				rs.Spec.Oci.Auth = configsync.AuthToken
+				rs.Spec.Oci.SecretRef = &v1beta1.SecretReference{}
+
+			}),
+			wantErr: MissingSecretRef(configsync.OciSource, configsync.RepoSyncKind),
 		},
 		// Validate Helm spec
 		{
@@ -711,6 +759,42 @@ func TestValidateRootSyncSpec(t *testing.T) {
 				}
 			}),
 			wantErr: OverrideResourceQuantityNegative("memoryLimit", configsync.RootSyncKind),
+		},
+		{
+			name: "spec.oci.auth=token and valid spec.oci.secretRef",
+			obj: rootSyncWithOci(func(rs *v1beta1.RootSync) {
+				rs.Spec.Oci.Auth = configsync.AuthToken
+				rs.Spec.Oci.SecretRef = &v1beta1.SecretReference{
+					Name: "token",
+				}
+			}),
+			wantErr: nil,
+		},
+		{
+			name: "spec.oci.auth=token and nil spec.oci.secretRef",
+			obj: rootSyncWithOci(func(rs *v1beta1.RootSync) {
+				rs.Spec.Oci.Auth = configsync.AuthToken
+
+			}),
+			wantErr: MissingSecretRef(configsync.OciSource, configsync.RootSyncKind),
+		},
+		{
+			name: "spec.oci.auth=token and nil spec.oci.secretRef.name",
+			obj: rootSyncWithOci(func(rs *v1beta1.RootSync) {
+				rs.Spec.Oci.Auth = configsync.AuthToken
+				rs.Spec.Oci.SecretRef = &v1beta1.SecretReference{}
+
+			}),
+			wantErr: MissingSecretRef(configsync.OciSource, configsync.RootSyncKind),
+		},
+		{
+			name: "illegal secret",
+			obj: rootSyncWithOci(func(rs *v1beta1.RootSync) {
+				rs.Spec.Oci.SecretRef = &v1beta1.SecretReference{
+					Name: "illegal secret",
+				}
+			}),
+			wantErr: IllegalSecretRef(configsync.OciSource, configsync.RootSyncKind),
 		},
 	}
 
