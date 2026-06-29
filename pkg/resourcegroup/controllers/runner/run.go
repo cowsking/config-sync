@@ -82,8 +82,10 @@ func run() error {
 	}
 
 	defer func() {
-		if err := oce.Shutdown(ctx); err != nil {
-			klog.Error(err, "Unable to stop the OTLP metrics exporter")
+		if oce != nil {
+			if err := oce.Shutdown(ctx); err != nil {
+				klog.Error(err, "Unable to stop the OTLP metrics exporter")
+			}
 		}
 	}()
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{

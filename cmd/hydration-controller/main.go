@@ -87,10 +87,12 @@ func main() {
 	}
 
 	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), kmetrics.ShutdownTimeout)
-		defer cancel()
-		if err := oce.Shutdown(shutdownCtx); err != nil {
-			klog.Fatalf("Unable to stop the OTLP metrics exporter: %v", err)
+		if oce != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), kmetrics.ShutdownTimeout)
+			defer cancel()
+			if err := oce.Shutdown(shutdownCtx); err != nil {
+				klog.Fatalf("Unable to stop the OTLP metrics exporter: %v", err)
+			}
 		}
 	}()
 

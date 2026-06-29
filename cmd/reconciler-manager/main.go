@@ -191,10 +191,12 @@ func main() {
 	}
 
 	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), metrics.ShutdownTimeout)
-		defer cancel()
-		if err := oce.Shutdown(shutdownCtx); err != nil {
-			setupLog.Error(err, "failed to stop the OTLP metrics exporter")
+		if oce != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), metrics.ShutdownTimeout)
+			defer cancel()
+			if err := oce.Shutdown(shutdownCtx); err != nil {
+				setupLog.Error(err, "failed to stop the OTLP metrics exporter")
+			}
 		}
 	}()
 
@@ -204,10 +206,12 @@ func main() {
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		// os.Exit(1) does not run deferred functions so explicitly stopping the OTLP metrics exporter.
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), metrics.ShutdownTimeout)
-		defer cancel()
-		if err := oce.Shutdown(shutdownCtx); err != nil {
-			setupLog.Error(err, "failed to stop the OTLP metrics exporter")
+		if oce != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), metrics.ShutdownTimeout)
+			defer cancel()
+			if err := oce.Shutdown(shutdownCtx); err != nil {
+				setupLog.Error(err, "failed to stop the OTLP metrics exporter")
+			}
 		}
 		os.Exit(1)
 	}

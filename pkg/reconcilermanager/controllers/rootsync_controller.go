@@ -17,6 +17,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"os"
 	"fmt"
 	"slices"
 	"strings"
@@ -795,6 +796,15 @@ func (r *RootSyncReconciler) populateContainerEnvs(ctx context.Context, rs *v1be
 		),
 	}
 
+	if os.Getenv("DISABLE_MONITORING") == "true" {
+		for _, container := range []string{reconcilermanager.Reconciler, reconcilermanager.HydrationController} {
+			result[container] = append(result[container], corev1.EnvVar{
+				Name:  "DISABLE_MONITORING",
+				Value: "true",
+			})
+		}
+	}
+
 	var err error
 
 	switch rs.Spec.SourceType {
@@ -1251,7 +1261,11 @@ func (r *RootSyncReconciler) mutationsFor(ctx context.Context, rs *v1beta1.RootS
 					// TODO: enable resource/logLevel overrides for gcenode-askpass-sidecar
 				}
 			case metrics.OtelAgentName:
-				container.Env = append(container.Env, containerEnvs[container.Name]...)
+				if os.Getenv("DISABLE_MONITORING") == "true" {
+					addContainer = false
+				} else {
+					container.Env = append(container.Env, containerEnvs[container.Name]...)
+				}
 			default:
 				return fmt.Errorf("unknown container in reconciler deployment template: %q", container.Name)
 			}
