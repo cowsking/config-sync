@@ -307,9 +307,72 @@ curl http://localhost:8675/metrics
 - **Config Sync v1.11.x and earlier**: Uses `stackdriver` exporter (deprecated)
 - **Config Sync v1.8+**: Custom monitoring support available
 
+## Disabling Monitoring Telemetry
+
+Starting in Config Sync v1.25, users can opt out of metric collection to save resource consumption (CPU/memory) and reduce telemetry overheads.
+
+### Option 1: Per-Sync Declarative Disabling (RootSync / RepoSync)
+
+You can turn off monitoring for individual `RootSync` or `RepoSync` objects by setting `spec.monitoring.enabled: false` in their specification:
+
+```yaml
+apiVersion: configsync.gke.io/v1beta1
+kind: RootSync
+metadata:
+  name: root-sync
+  namespace: config-management-system
+spec:
+  monitoring:
+    enabled: false
+```
+
+When `spec.monitoring.enabled: false` is set:
+- The `otel-agent` sidecar container is omitted from the reconciler Pod, saving container memory and CPU requests/limits.
+- Metric collection and exporting for that reconciler are turned off.
+
+### Option 2: Complete Cluster-Wide Removal (OSS Administrators)
+
+If an open-source cluster administrator wants to safely delete the `config-management-monitoring` namespace entirely and stop all OpenTelemetry controller activity:
+
+1. Statically inject the `DISABLE_MONITORING=true` environment variable into the Deployment manifests of both `reconciler-manager` and `resource-group-controller-manager`:
+
+```yaml
+env:
+- name: DISABLE_MONITORING
+  value: "true"
+```
+
+2. Delete the monitoring namespace:
+
+```shell
+kubectl delete ns config-management-monitoring
+```
+
+When `DISABLE_MONITORING=true` is injected:
+- The `reconciler-manager` skips registering Otel controllers.
+- Reconciler Pods will no longer include `otel-agent` sidecar containers.
+- Metric recording calls fallback safely to OpenTelemetry Noop providers without panic or network connection errors.
+
+### Benchmark & Resource Savings (500 RepoSync Scale)
+
+The following benchmark measures the memory savings from disabling the OpenTelemetry (`otel-agent`) sidecar on a cluster with 500 `RepoSync` objects across 500 namespaces on an 8-node GKE cluster:
+
+| Metric / Scope | Monitoring Enabled (Baseline) | Monitoring Disabled (Optimized) | Total Memory Saved | Average Savings per RepoSync |
+|----------------|-------------------------------|----------------------------------|--------------------|------------------------------|
+| **Total Memory (`config-management-system`)** | 42,187 Mi (~41.20 GiB) | 25,542 Mi (~24.94 GiB) | **16,645 Mi (~16.25 GiB)** | **~33.29 MiB (-39.5%)** |
+| **Containers per Reconciler Pod** | 3/3 (`reconciler`, `git-sync`, `otel-agent`) | 2/2 (`reconciler`, `git-sync`) | **-1 Sidecar Container** | **-100% Sidecar Overhead** |
+| **Telemetry Network Overhead** | Active gRPC to `:4317` | None (Noop) | **Zero Exporter Overhead** | **100% Telemetry Offloaded** |
+
+#### Benchmark Methodology & Highlights
+- **Environment**: 8-node GKE cluster running 500 active `RepoSync` instances across 500 namespaces (`test-ns-1` through `test-ns-500`).
+- **Measurement**: Raw aggregated Pod memory footprint measured via `kubectl top pods -n config-management-system`.
+- **Key Finding**: Disabling the OpenTelemetry sidecar across 500 `RepoSync` reconcilers reclaims **16,645 Mi (~16.25 GiB)** of memory back to the cluster (saving **~33.29 MiB** per reconciler Pod).
+
+
 ## Additional Resources
 
 - [OpenTelemetry Collector Documentation](https://opentelemetry.io/docs/collector/)
 - [Google Cloud Monitoring Documentation](https://cloud.google.com/monitoring)
 - [Config Sync Monitoring Guide](http://cloud/anthos-config-management/docs/how-to/monitoring-config-sync)
 - [Available Config Sync Metrics](http://cloud/anthos-config-management/docs/how-to/monitoring-config-sync#metrics)
+
